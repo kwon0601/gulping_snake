@@ -1,3 +1,4 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include <SFML/Graphics.hpp>
 #include <SFML/Audio.hpp>
 #include <nlohmann/json.hpp>
@@ -5,8 +6,9 @@
 #include <iostream>
 #include <fstream>
 #include <deque>
-#include<stack>
-#include<algorithm>
+#include <stack>
+#include <algorithm>
+#include <steam/steam_api.h> 
 #define MAXLEVEL 40
 #define SFML_STATIC
 using json = nlohmann::json;
@@ -17,7 +19,8 @@ enum class textures { mainButton, backButton, clear, notClear, tile, wall, apple
     cloneItem,cloneHead,cloneBody,gameOver, snakeShort1, snakeShort2, snakeShort3, snakeShort4,snakeHead1,snakeHead2, 
     snakeHead3, snakeHead4, snakeBody1, snakeBody2, snakeBody3, snakeBody4, snakeBody5, snakeBody6, snakeBody7,snakeBody8, 
     snakeTail1, snakeTail2, snakeTail3, snakeTail4,arrowDown,arrowRight,arrowUp,arrowLeft,keyZ,keyR,space,
-    title,musicOn,musicOff,soundOn,soundOff,level,credit
+    title,musicOn,musicOff,soundOn,soundOff,level,credit,deleteButton,deletePopup,
+    yes,no,deleteCompletedPopup
 };
 
 enum class sounds { buttonCliked,item,button,move,gameOver,clear,eat,undo
@@ -39,8 +42,10 @@ sf::SoundBuffer soundBuffers[20];
 sf::Music bgm;
 int resX = 1600;
 int resY = 900;
+std::string logs="log";
 
 void saveClearData();
+void unlockAchievement(const char* achievementID);
 
 struct MapStatus
 {
@@ -215,6 +220,7 @@ public:
         return textureNum;
     }
 
+
 private:
     CustomText text;
     sf::Sprite sprite;
@@ -248,6 +254,7 @@ public:
         {
             processEvents();
             render();
+            SteamAPI_RunCallbacks();
         }
     }
 
@@ -277,9 +284,13 @@ private:
     int levelCursor = 0;
     bool music = true;
     bool sound = true;
+    int dataDeletePopUp = 0;
+    int firstTurn=0;
 
     void titleToLevel()
     {
+        if (level == 40)
+            unlockAchievement("AllClear");
         buttons.clear();
         stageButtons.clear();
         backButton.clear();
@@ -300,13 +311,14 @@ private:
     {
         lastPressed = 0;
         die = 0;
+        firstTurn = 0;
         while (!mapStatusHistory.empty()) 
         {
             mapStatusHistory.pop();
         }
         currentMapHeight = levels[level].height;
         currentMapWidth = levels[level].width;
-        //∏ 
+        //Îßµ
         for (int i = 0; i < currentMapHeight; ++i)
         {
             for (int j = 0; j < currentMapWidth; ++j)
@@ -316,13 +328,13 @@ private:
             }
         }
 
-        //ªÛ¿⁄
+        //ÏÉÅÏûê
         for (int i = 0; i < levels[level].box.size(); ++i)
         {
             isBox[levels[level].box[i][0]][levels[level].box[i][1]] = 1;
         }
         
-        //πÏ
+        //Î±Ä
         snake.clear();
         for (int i = 0; i < levels[level].snake.size(); ++i)
         {
@@ -345,6 +357,7 @@ private:
         buttons.push_back(CustomButton(0.3, 0.4, 0.4, 0.12, static_cast<int>(textures::mainButton), "play"));
         buttons.push_back(CustomButton(0.3, 0.6, 0.4, 0.12, static_cast<int>(textures::mainButton), "credit"));
         buttons.push_back(CustomButton(0.3, 0.8, 0.4, 0.12, static_cast<int>(textures::mainButton), "exit"));
+        buttons.push_back(CustomButton(0.04, 0.77, 0.10, 0.15, static_cast<int>(textures::deleteButton),""));
         if(music)
             buttons.push_back(CustomButton(0.85, 0.6, 0.15, 0.15, static_cast<int>(textures::musicOn), ""));
         else
@@ -353,6 +366,8 @@ private:
             buttons.push_back(CustomButton(0.85, 0.8, 0.15, 0.15, static_cast<int>(textures::soundOn), ""));
         else
             buttons.push_back(CustomButton(0.85, 0.8, 0.15, 0.15, static_cast<int>(textures::soundOff), ""));
+        buttons.push_back(CustomButton(0.32, 0.6, 0.08, 0.1, static_cast<int>(textures::yes), ""));
+        buttons.push_back(CustomButton(0.6, 0.6, 0.08, 0.1, static_cast<int>(textures::no), ""));
         for (int i = 0; i < 5; ++i)
         {
             for (int j = 0; j < 8; ++j)
@@ -421,7 +436,7 @@ private:
             }
         }
 
-        //ªÛ¿⁄
+        //ÏÉÅÏûê
         for (int i = 0; i < currentMapHeight; i++)
         {
             for (int j = 0; j < currentMapWidth; j++)
@@ -435,7 +450,7 @@ private:
             }
         }
 
-        //πÏ
+        //Î±Ä
         if (snake.size() != 0)
         {
             drawSnake(0);
@@ -462,13 +477,13 @@ private:
         }
         else
         {
-            //∏”∏Æ
+            //Î®∏Î¶¨
             int targetSprite = 54 + relationalPos((*currentSnake)[1][0], (*currentSnake)[1][1], (*currentSnake)[0][0], (*currentSnake)[0][1]);
             inGameSprites[targetSprite].setScale(resX * 0.8 / currentMapWidth / inGameSprites[targetSprite].getLocalBounds().width, resY * 0.8 / currentMapHeight / inGameSprites[targetSprite].getLocalBounds().height);
             inGameSprites[targetSprite].setPosition((0.1 + ((*currentSnake)[0][1]) * 0.8 / currentMapWidth) * resX, (0.1 + ((*currentSnake)[0][0]) * 0.8 / currentMapHeight) * resY);
             window.draw(inGameSprites[targetSprite]);
 
-            //∏ˆ≈Î
+            //Î™∏ÌÜµ
             for (int i = 1; i < (*currentSnake).size() - 1; i++)
             {
                 targetSprite = 58 + relationalPos3((*currentSnake)[i - 1][0], (*currentSnake)[i - 1][1], (*currentSnake)[i][0], (*currentSnake)[i][1], (*currentSnake)[i + 1][0], (*currentSnake)[i + 1][1]);
@@ -477,7 +492,7 @@ private:
                 window.draw(inGameSprites[targetSprite]);
             }
 
-            //≤ø∏Æ
+            //Íº¨Î¶¨
             targetSprite = 66 + relationalPos((*currentSnake)[(*currentSnake).size() - 2][0], (*currentSnake)[(*currentSnake).size() - 2][1], (*currentSnake)[(*currentSnake).size() - 1][0], (*currentSnake)[(*currentSnake).size() - 1][1]);
             inGameSprites[targetSprite].setScale(resX * 0.8 / currentMapWidth / inGameSprites[targetSprite].getLocalBounds().width, resY * 0.8 / currentMapHeight / inGameSprites[targetSprite].getLocalBounds().height);
             inGameSprites[targetSprite].setPosition((0.1 + ((*currentSnake)[(*currentSnake).size() - 1][1]) * 0.8 / currentMapWidth) * resX, (0.1 + ((*currentSnake)[(*currentSnake).size() - 1][0]) * 0.8 / currentMapHeight) * resY);
@@ -486,19 +501,19 @@ private:
         }
     }
 
-    int relationalPos(int x1, int y1, int x2, int y2)//∏”∏Æ,≤ø∏Æ,±Ê¿Ã1 Ω∫«¡∂Û¿Ã∆Æ πÊ«‚ ∞·¡§ø° ªÁøÎ, ¡°2¿« ªÛ¥Î¿˚ ¿ßƒ°
+    int relationalPos(int x1, int y1, int x2, int y2)//Î®∏Î¶¨,Íº¨Î¶¨,Í∏∏Ïù¥1 Ïä§ÌîÑÎùºÏù¥Ìä∏ Î∞©Ìñ• Í≤∞Ï†ïÏóê ÏÇ¨Ïö©, Ï†ê2Ïùò ÏÉÅÎåÄÏ†Å ÏúÑÏπò
     {
-        if (x2 - x1 == 1)//æ∆∑°
+        if (x2 - x1 == 1)//ÏïÑÎûò
             return 0;
-        if (y2 - y1 == 1)//ø¿∏•¬ 
+        if (y2 - y1 == 1)//Ïò§Î•∏Ï™Ω
             return 1;
-        if (x2 - x1 == -1)//¿ß
+        if (x2 - x1 == -1)//ÏúÑ
             return 2;
-        if (y2 - y1 == -1)//øﬁ¬ 
+        if (y2 - y1 == -1)//ÏôºÏ™Ω
             return 3;
     }
 
-    int relationalPos3(int x1, int y1,int x2,int y2,int x3,int y3)//∏ˆ≈Î Ω∫«¡∂Û¿Ã∆Æ ∞·¡§ø° ªÁøÎ,º˝¿⁄∞° ≥∑¿ªºˆ∑œ ∏”∏Æø° ∞°±ÓøÚ
+    int relationalPos3(int x1, int y1,int x2,int y2,int x3,int y3)//Î™∏ÌÜµ Ïä§ÌîÑÎùºÏù¥Ìä∏ Í≤∞Ï†ïÏóê ÏÇ¨Ïö©,Ïà´ÏûêÍ∞Ä ÎÇÆÏùÑÏàòÎ°ù Î®∏Î¶¨Ïóê Í∞ÄÍπåÏõÄ
     {
         if (x3 - x1 == 2)
             return 0;
@@ -609,7 +624,7 @@ private:
         newVec[0] = (*currentSnake)[0][0] + derX;
         newVec[1] = (*currentSnake)[0][1] + derY;
 
-        //πÏ¿« ∏ˆ∞˙ ∫Œµ˙ƒ°¥¬¡ˆ »Æ¿Œ
+        //Î±ÄÏùò Î™∏Í≥º Î∂ÄÎî™ÏπòÎäîÏßÄ ÌôïÏù∏
         for (int i = 0; i < snake.size(); i++)
         {
             if ((newVec[0] == snake[i][0]) && (newVec[1] == snake[i][1]))
@@ -621,12 +636,12 @@ private:
                 return ;
         }
 
-        //πÏ∞˙ ≈¨∑–¿« ¿Ãµø º¯º≠ ¬˜¿Ã∞° æ¯µµ∑œ ≥™¡ﬂø° ¿Ãµø«œ¥¬ πÏ¿Ã ≈¨∑–¿Ã ¿÷¥¯ ¿⁄∏Æø° ∞°∑¡∞Ì «œ∏È ∏¯ ∞°∞‘ «‘
+        //Î±ÄÍ≥º ÌÅ¥Î°†Ïùò Ïù¥Îèô ÏàúÏÑú Ï∞®Ïù¥Í∞Ä ÏóÜÎèÑÎ°ù ÎÇòÏ§ëÏóê Ïù¥ÎèôÌïòÎäî Î±ÄÏù¥ ÌÅ¥Î°†Ïù¥ ÏûàÎçò ÏûêÎ¶¨Ïóê Í∞ÄÎ†§Í≥† ÌïòÎ©¥ Î™ª Í∞ÄÍ≤å Ìï®
         if ((newVec[0] == lastRemoved[0]) && (newVec[1] == lastRemoved[1])&& (isClone == 0))
             return ;
 
 
-        if (isBox[newVec[0]][newVec[1]])//ªÛ¿⁄
+        if (isBox[newVec[0]][newVec[1]])//ÏÉÅÏûê
         {
             if (isBox[newVec[0] + derX][newVec[1] + derY] == 0)
             {
@@ -731,6 +746,7 @@ private:
                 if (sound)
                     sounds[static_cast<int>(sounds::clear)].play();
                 clear[level] = 1;
+                achievementCheck();
                 levelCursor = level + 1;
                 if (levelCursor == MAXLEVEL)
                     levelCursor = 0;
@@ -741,6 +757,7 @@ private:
                         break;
                     if (i == 39)
                     {
+                        unlockAchievement("AllClear");
                         allClear = true;
                         levelToTitle();
                         level = MAXLEVEL;
@@ -784,10 +801,25 @@ private:
                 if (sound)
                     sounds[static_cast<int>(sounds::clear)].play();
                 clear[level] = 1;
+                achievementCheck();
                 levelCursor = level + 1;
                 if (levelCursor == MAXLEVEL)
                     levelCursor = 0;
                 saveClearData();
+                for (int i = 0; i < MAXLEVEL; i++)
+                {
+                    if ((clear[i] == 0) || allClear)
+                        break;
+                    if (i == 39)
+                    {
+                        unlockAchievement("AllClear");
+                        allClear = true;
+                        levelToTitle();
+                        level = MAXLEVEL;
+                        titleToLevel();
+                        return;
+                    }
+                }
                 level = 0;
                 levelToTitle();
                 gameState = static_cast<GameState>(GameState::LevelSelect);
@@ -843,6 +875,8 @@ private:
         {
             if (sound)
                 sounds[static_cast<int>(sounds::item)].play();
+            if (firstTurn == 0)
+                firstTurn = newVec[1];
             (*currentSnake).push_front(newVec);
             removeTail(isClone);
             turnAble = 1;
@@ -888,7 +922,7 @@ private:
             lastRemoved[1] = snakeClone[snakeClone.size() - 1][1];
         }
         
-        int tailElement=gameMap[(*currentSnake)[(*currentSnake).size() - 1][0]][(*currentSnake)[(*currentSnake).size() - 1][1]];//≤ø∏Æø° ¿÷¥¯ ∞Õ
+        int tailElement=gameMap[(*currentSnake)[(*currentSnake).size() - 1][0]][(*currentSnake)[(*currentSnake).size() - 1][1]];//Íº¨Î¶¨Ïóê ÏûàÎçò Í≤É
         if (tailElement == static_cast<int>(Objects::passWall))
         {
             gameMap[(*currentSnake)[(*currentSnake).size() - 1][0]][(*currentSnake)[(*currentSnake).size() - 1][1]] = 1;
@@ -953,13 +987,13 @@ private:
     {
         for (const auto& segment : levels[level].clone)
         {
-            //ø¯∑° πÏ¿« ∏ˆ∞˙ ∞„ƒ°¥¬¡ˆ »Æ¿Œ
+            //ÏõêÎûò Î±ÄÏùò Î™∏Í≥º Í≤πÏπòÎäîÏßÄ ÌôïÏù∏
             for (int i = 0; i < snake.size(); i++)
             {
                 if ((segment[0] == snake[i][0]) && (segment[1] == snake[i][1]))
                     return 0;
             }
-            //ªÛ¿⁄øÕ ∞„ƒ°¥¬¡ˆ »Æ¿Œ
+            //ÏÉÅÏûêÏôÄ Í≤πÏπòÎäîÏßÄ ÌôïÏù∏
             if (isBox[segment[0]][segment[1]] == 1)
                 return 0;
         }
@@ -997,7 +1031,7 @@ private:
 
     void pushMapStatus()
     {
-        //¿Ã¿¸ ∏ ªÛ≈¬øÕ ∞∞¿∫¡ˆ »Æ¿Œ
+        //Ïù¥Ï†Ñ ÎßµÏÉÅÌÉúÏôÄ Í∞ôÏùÄÏßÄ ÌôïÏù∏
         if (sameSnake())
             return;
 
@@ -1024,7 +1058,7 @@ private:
 
     void popMapStatus()
     {
-        //¿Ã¿¸ ∏ ªÛ≈¬øÕ «ˆ¿ÁøÕ ∞∞¿∫¡ˆ »Æ¿Œ 
+        //Ïù¥Ï†Ñ ÎßµÏÉÅÌÉúÏôÄ ÌòÑÏû¨ÏôÄ Í∞ôÏùÄÏßÄ ÌôïÏù∏ 
         if (sameSnake())
             mapStatusHistory.pop();
 
@@ -1066,6 +1100,34 @@ private:
         window.draw(sprite);
     }
 
+    void achievementCheck()
+    {
+        unlockAchievement("Clear");
+        if (level == 24)
+        {
+            if (isBox[1][14] == 1)
+            {
+                unlockAchievement("BoxOnIce");
+            }
+        }
+        else if (level == 30)
+        {
+            if (firstTurn == 5)
+            {
+                unlockAchievement("AgainstTheFlow");
+            }
+        }
+        else if (level == 31)
+        {
+            if (relationalPos(snake[0][0], snake[0][1], snake[1][0], snake[1][1]) != 
+                relationalPos(snakeClone[0][0], snakeClone[0][1], snakeClone[1][0], snakeClone[1][1]))
+            {
+                unlockAchievement("DifferentView");
+            }
+
+        }
+    }
+
     void processEvents()
     {
         sf::Event event;
@@ -1073,6 +1135,7 @@ private:
         {
             if (event.type == sf::Event::Closed)
             {
+                SteamAPI_Shutdown();
                 window.close();
             }
             if (event.type == sf::Event::MouseButtonPressed)
@@ -1195,9 +1258,21 @@ private:
         {
             CustomSprite title = CustomSprite(0.325, 0.08, 0.35, 0.25, static_cast<int>(textures::title));
             title.draw(window);
-            for (auto& button : buttons)
+            for (int i = 0; i < 6; i++)
             {
-                button.draw(window);
+                buttons[i].draw(window);
+            }
+            if (dataDeletePopUp == 1)
+            {
+                CustomSprite deletePopUp = CustomSprite(0.25, 0.25, 0.5, 0.6, static_cast<int>(textures::deletePopup));
+                deletePopUp.draw(window);
+                buttons[6].draw(window);
+                buttons[7].draw(window);
+            }
+            if (dataDeletePopUp == 2)
+            {
+                CustomSprite deletePopUp = CustomSprite(0.25, 0.25, 0.5, 0.6, static_cast<int>(textures::deleteCompletedPopup));
+                deletePopUp.draw(window);
             }
         }
         else if (gameState == GameState::LevelSelect)
@@ -1270,7 +1345,33 @@ private:
     {
         if (gameState == GameState::TitleScreen)
         {
-            if (buttons[0].isClicked(x, y, window))
+            if (dataDeletePopUp == 1)
+            {
+                if (buttons[6].isClicked(x, y, window))
+                {
+                    if (sound)
+                        sounds[static_cast<int>(sounds::buttonCliked)].play();
+                    for (int i = 0; i < MAXLEVEL; i++)
+                    {
+                        clear[i] = 0;
+                    }
+                    saveClearData();
+                    dataDeletePopUp = 2;
+                }
+                else if (buttons[7].isClicked(x, y, window))
+                {
+                    if (sound)
+                        sounds[static_cast<int>(sounds::buttonCliked)].play();
+                    dataDeletePopUp = 0;
+                }
+            }
+            else if (dataDeletePopUp == 2)
+            {
+                if (sound)
+                    sounds[static_cast<int>(sounds::buttonCliked)].play();
+                dataDeletePopUp = 0;
+            }
+            else if (buttons[0].isClicked(x, y, window))
             {
                 if (sound)
                     sounds[static_cast<int>(sounds::buttonCliked)].play();
@@ -1286,35 +1387,42 @@ private:
             {
                 if (sound)
                     sounds[static_cast<int>(sounds::buttonCliked)].play();
+                SteamAPI_Shutdown();
                 window.close();
             }
             else if (buttons[3].isClicked(x, y, window))
             {
+                if (sound)
+                    sounds[static_cast<int>(sounds::buttonCliked)].play();
+                dataDeletePopUp = 1;
+            }
+            else if (buttons[4].isClicked(x, y, window))
+            {
                 if (music)
                 {
                     music = false;
-                    buttons[3].setTextureNum(static_cast<int>(textures::musicOff));
+                    buttons[4].setTextureNum(static_cast<int>(textures::musicOff));
                     bgm.stop();
                 }
                 else
                 {
                     music = true;
-                    buttons[3].setTextureNum(static_cast<int>(textures::musicOn));
+                    buttons[4].setTextureNum(static_cast<int>(textures::musicOn));
                     bgm.setLoop(true);
                     bgm.play();
                 }
             }
-            else if (buttons[4].isClicked(x, y, window))
+            else if (buttons[5].isClicked(x, y, window))
             {
                 if (sound)
                 {
                     sound = false;
-                    buttons[4].setTextureNum(static_cast<int>(textures::soundOff));
+                    buttons[5].setTextureNum(static_cast<int>(textures::soundOff));
                 }
                 else
                 {
                     sound = true;
-                    buttons[4].setTextureNum(static_cast<int>(textures::soundOn));
+                    buttons[5].setTextureNum(static_cast<int>(textures::soundOn));
                 }
             }
         }
@@ -1468,7 +1576,9 @@ void readClearData()
         if (clear[i] == 0)
             break;
         if (i == 39)
+        {
             allClear = true;
+        }
     }
 }
 
@@ -1548,6 +1658,11 @@ void loadTextures()
     textures[55].loadFromFile("images/soundOff.png");
     textures[56].loadFromFile("images/level.png");
     textures[57].loadFromFile("images/credit.png");
+    textures[58].loadFromFile("images/deleteButton.png");
+    textures[59].loadFromFile("images/deletePopup.png");
+    textures[60].loadFromFile("images/yes.png");
+    textures[61].loadFromFile("images/no.png");
+    textures[62].loadFromFile("images/deleteCompletedPopup.png");
 }
 
 void loadInGameSprites()
@@ -1623,8 +1738,16 @@ void loadSounds()
     bgm.play();
 }
 
+void unlockAchievement(const char* achievementID)
+{
+    SteamUserStats()->SetAchievement(achievementID);
+    SteamUserStats()->StoreStats();
+      
+}
+
 int main()
 {
+    SteamAPI_Init();
     readLevelData();
     readClearData();
     loadTextures();
